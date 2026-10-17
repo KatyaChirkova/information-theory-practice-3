@@ -1,4 +1,4 @@
--- Запрос Q18 к слою Bronze. Для проверки GZIP замените bronze на bronze_gzip.
+-- Запрос Q18 к слою Bronze. Для проверки GZIP нужно заменить bronze на bronze_gzip
 SELECT
   c.name,
   c.custkey,
