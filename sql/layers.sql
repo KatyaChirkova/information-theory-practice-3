@@ -23,11 +23,12 @@ HAVING sum(quantity) > 300;
 
 CREATE TABLE iceberg.silver.enriched_orders
 WITH (format='PARQUET', format_version=2, compression_codec='ZSTD') AS
-SELECT c.name, c.custkey, o.orderkey, o.orderdate, o.totalprice,
+SELECT trim(c.name) AS name, c.custkey, o.orderkey, o.orderdate, o.totalprice,
        lo.total_quantity
 FROM iceberg.silver.large_orders lo
 JOIN iceberg.bronze.orders o ON o.orderkey = lo.orderkey
-JOIN iceberg.bronze.customer c ON c.custkey = o.custkey;
+JOIN iceberg.bronze.customer c ON c.custkey = o.custkey
+WHERE trim(c.name) <> '';
 
 CREATE TABLE iceberg.gold.q18_top100
 WITH (format='PARQUET', format_version=2, compression_codec='ZSTD') AS
