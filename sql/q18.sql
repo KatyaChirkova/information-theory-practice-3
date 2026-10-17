@@ -1,4 +1,3 @@
--- Reference TPC-H Q18. Replace sf1 with the chosen scale factor.
 SELECT
   c.name,
   c.custkey,

@@ -1,6 +1,4 @@
--- Q18 over the Iceberg Bronze layer. Use bronze_gzip in place of bronze to
--- benchmark GZIP against ZSTD; customer, orders, and lineitem must all use
--- the same codec for a fair comparison.
+-- Запрос Q18 к слою Bronze. Для проверки GZIP замените bronze на bronze_gzip.
 SELECT
   c.name,
   c.custkey,
