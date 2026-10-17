@@ -1,6 +1,6 @@
 -- Повторно создаёт тестовые копии customer, orders и lineitem.
 
--- После выполнения время записи каждой таблицы смотри в статистике Trino.
+-- После выполнения время записи каждой таблицы смотреть в статистике Trino.
 
 CREATE SCHEMA IF NOT EXISTS iceberg.bench_parquet_zstd;
 DROP TABLE IF EXISTS iceberg.bench_parquet_zstd.customer;
