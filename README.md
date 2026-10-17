@@ -1,30 +1,70 @@
 # Практическая работа №1 — TPC-H Q18
 
-Проект для построения небольшого lakehouse на Iceberg и выполнения варианта 3 (Q18).
+Вариант 3: запрос Q18 из набора TPC-H. В работе используется локальный lakehouse на Iceberg и масштаб данных `sf1`.
 
-## Запуск
+## Порядок выполнения
 
-1. Запустить Docker Desktop.
-2. Из корня проекта выполнить `docker compose up -d --build`.
-3. Открыть Trino Web UI: http://localhost:8080; MinIO Console: http://localhost:9001; Lakekeeper UI: http://localhost:8181/ui/.
-4. SQL для загрузки и запроса находится в `sql/`.
+1. Запусти Docker Desktop и дождись, пока он будет готов.
+2. Открой терминал в папке проекта.
+3. Запусти сервисы командой:
 
-Для первого запуска выбран `sf1`. Учётные данные в локальном compose предназначены только для учебного запуска. Trino UI доступен на порту 8080; SQL можно выполнять из Trino CLI внутри контейнера командой `docker compose exec trino trino --catalog tpch --schema sf1` или из UI.
+   ```bash
+   docker compose up -d --build
+   ```
 
-## Состав
+4. Дождись запуска Trino и остальных сервисов. Веб-интерфейсы доступны по адресам:
+   - Trino — [http://localhost:8080](http://localhost:8080)
+   - MinIO — [http://localhost:9001](http://localhost:9001)
+   - Lakekeeper — [http://localhost:8181/ui/](http://localhost:8181/ui/)
+   - Superset — [http://localhost:8088](http://localhost:8088)
 
-- MinIO-compatible S3 object store (`pgsty/minio` image) — объектное хранилище Parquet-файлов. В текущем Docker Hub upstream-образ MinIO недоступен; используется совместимый поддерживаемый образ на основе MinIO.
-- PostgreSQL — хранилище метаданных Lakekeeper.
-- Lakekeeper — Iceberg REST Catalog.
-- Trino — SQL-движок и генератор TPC-H.
-- Superset — BI-инструмент для подключения к Trino.
+5. Создай таблицы слоёв Bronze, Silver и Gold. Для этого из корня проекта выполни:
 
-При старте в Superset уже создано соединение `Trino Lakehouse` с URI `trino://admin@trino:8080/iceberg/bronze`. Superset доступен на http://localhost:8088; локальный логин `admin` / `admin-local-only`. В **SQL Lab** выбери это соединение и выполни `SELECT count(*) FROM customer;` — проверенный ответ 150000.
+   ```bash
+   docker compose exec -T trino trino --catalog iceberg --schema bronze < sql/layers.sql
+   ```
 
-## Выполнение запроса и слоёв
+   Этот шаг выполняется при первом запуске проекта.
 
-Создай схемы и таблицы командами из `sql/layers.sql` при первом запуске. `sql/q18.sql` — исходный запрос по TPC-H; `sql/q18_bronze.sql` выполняет ту же логику по Iceberg Bronze. В Trino Web UI можно смотреть длительность запросов; размеры файлов собраны из Iceberg `$files`.
+6. Выполни запрос Q18 к исходным таблицам TPC-H:
 
-## Отчёт
+   ```bash
+   docker compose exec -T trino trino --catalog tpch --schema sf1 < sql/q18.sql
+   ```
 
-Отчёт по практической работе находится в файле [`отчет.md`](отчет.md).
+7. Чтобы выполнить тот же запрос к таблицам Iceberg, запусти:
+
+   ```bash
+   docker compose exec -T trino trino --catalog iceberg --schema bronze < sql/q18_bronze.sql
+   ```
+
+   SQL-файлы также можно открыть и выполнять в Trino Web UI по адресу [http://localhost:8080](http://localhost:8080).
+
+8. Проверь подключение к данным через Superset. Войди по адресу [http://localhost:8088](http://localhost:8088), используя логин `admin` и пароль `admin-local-only`. Открой **SQL Lab**, выбери соединение `Trino Lakehouse` и выполни:
+
+   ```sql
+   SELECT count(*) FROM customer;
+   ```
+
+   Для масштаба `sf1` запрос должен вернуть `150000`.
+
+9. Когда закончишь работу, останови сервисы командой:
+
+   ```bash
+   docker compose down
+   ```
+
+## Сервисы
+
+- **MinIO** хранит файлы таблиц Parquet; используется образ `pgsty/minio`.
+- **PostgreSQL** хранит метаданные Lakekeeper.
+- **Lakekeeper** управляет каталогом таблиц Iceberg.
+- **Trino** выполняет SQL-запросы к TPC-H и Iceberg.
+- **Superset** подключается к Trino и позволяет просматривать данные через SQL Lab.
+
+## Файлы проекта
+
+- `sql/layers.sql` — создание схем и таблиц Bronze, Silver и Gold, а также копии Bronze со сжатием GZIP.
+- `sql/q18.sql` — запрос Q18 к исходным таблицам TPC-H.
+- `sql/q18_bronze.sql` — запрос Q18 к таблицам Iceberg Bronze.
+- [`отчет.md`](отчет.md) — отчёт по практической работе.
