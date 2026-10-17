@@ -1,0 +1,116 @@
+services:
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: lakehouse
+      MINIO_ROOT_PASSWORD: lakehouse-local-only
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+  minio-init:
+    image: amazon/aws-cli:latest
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: /bin/sh
+    environment:
+      AWS_ACCESS_KEY_ID: lakehouse
+      AWS_SECRET_ACCESS_KEY: lakehouse-local-only
+      AWS_DEFAULT_REGION: local-01
+    command: -c 'until aws --endpoint-url http://minio:9000 s3 ls >/dev/null 2>&1; do sleep 2; done; aws --endpoint-url http://minio:9000 s3 mb s3://lakehouse || true'
+    restart: "no"
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres-local-only
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 2s
+      timeout: 10s
+      retries: 20
+
+  lakekeeper-migrate:
+    image: quay.io/lakekeeper/catalog:latest
+    command: ["migrate"]
+    environment: &lakekeeper-env
+      LAKEKEEPER__PG_ENCRYPTION_KEY: local-study-key-change-before-sharing
+      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://postgres:postgres-local-only@postgres:5432/postgres
+      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://postgres:postgres-local-only@postgres:5432/postgres
+      LAKEKEEPER__AUTHZ_BACKEND: allowall
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  lakekeeper:
+    image: quay.io/lakekeeper/catalog:latest
+    command: ["serve"]
+    environment: *lakekeeper-env
+    ports:
+      - "8181:8181"
+    healthcheck:
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 3s
+      timeout: 10s
+      retries: 20
+      start_period: 5s
+    depends_on:
+      lakekeeper-migrate:
+        condition: service_completed_successfully
+
+  lakekeeper-bootstrap:
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "/scripts/bootstrap.sh"]
+    depends_on:
+      lakekeeper:
+        condition: service_healthy
+    volumes:
+      - ./config/bootstrap.sh:/scripts/bootstrap.sh:ro
+    restart: "no"
+
+  create-warehouse:
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "/scripts/create-warehouse.sh"]
+    depends_on:
+      lakekeeper-bootstrap:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./config/create-warehouse.json:/config/create-warehouse.json:ro
+      - ./config/create-warehouse.sh:/scripts/create-warehouse.sh:ro
+    restart: "no"
+
+  trino:
+    image: trinodb/trino:484
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/trino:/etc/trino:ro
+    depends_on:
+      create-warehouse:
+        condition: service_completed_successfully
+
+  superset:
+    build: ./superset
+    environment:
+      SUPERSET_SECRET_KEY: local-study-secret-key-change-before-sharing-123456789
+    ports:
+      - "8088:8088"
+    depends_on:
+      - trino
+    command: ["/bin/sh", "-c", "superset db upgrade && (superset fab create-admin --username admin --firstname Study --lastname User --email admin@example.com --password admin-local-only || true) && superset init && superset set-database-uri --database_name 'Trino Lakehouse' --uri 'trino://admin@trino:8080/iceberg/bronze' && superset run -h 0.0.0.0 -p 8088"]
+    volumes:
+      - superset-data:/app/superset_home
+
+volumes:
+  minio-data:
+  postgres-data:
+  superset-data:

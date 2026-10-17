@@ -1,0 +1,22 @@
+-- Q18 over the Iceberg Bronze layer. Use bronze_gzip in place of bronze to
+-- benchmark GZIP against ZSTD; customer, orders, and lineitem must all use
+-- the same codec for a fair comparison.
+SELECT
+  c.name,
+  c.custkey,
+  o.orderkey,
+  o.orderdate,
+  o.totalprice,
+  sum(l.quantity) AS total_quantity
+FROM iceberg.bronze.customer AS c
+JOIN iceberg.bronze.orders AS o ON c.custkey = o.custkey
+JOIN iceberg.bronze.lineitem AS l ON o.orderkey = l.orderkey
+WHERE o.orderkey IN (
+  SELECT orderkey
+  FROM iceberg.bronze.lineitem
+  GROUP BY orderkey
+  HAVING sum(quantity) > 300
+)
+GROUP BY c.name, c.custkey, o.orderkey, o.orderdate, o.totalprice
+ORDER BY o.totalprice DESC, o.orderdate
+LIMIT 100;
